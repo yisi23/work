@@ -1,0 +1,14 @@
+{{range $serv := services}}
+
+upstream {{$serv.Name}}{{ $service := service $serv.Name }}{
+  {{range $node := $service}}
+  server {{ $node.Name }} {{$node.Node}} {{$node.Address}}:{{$node.Port}}{{end}}
+}
+  listen 80;
+   
+  server_name {{$serv.Name}}{{ $service := service $serv.Name }};
+  location / {
+    proxy_pass http://{{$serv.Name}}{{ $service := service $serv.Name }};
+  }
+}
+{{end}}
