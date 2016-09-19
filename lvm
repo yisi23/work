@@ -1,0 +1,57 @@
+- name: Configure servers
+  hosts: lvm
+  tasks:
+    - name: Ensure required packages are installed
+      yum: name={{ item }}
+      with_items:
+        - lvm2
+        - parted
+
+    - name: Check for /dev/xvda3
+      command: parted -s /dev/xvda print 3
+      register: xvda3
+      failed_when: xvda3.rc is not defined
+      changed_when: >
+        xvda3.stdout == "Error: Partition doesn't exist."
+
+    - name: mklabel for /dev/xvdb
+      command: parted  -s /dev/xvdb mklabel gpt
+      register: xvdb
+      failed_when: xvdb.rc is not defined
+      changed_when: >
+        xvdb.stdout == "Error: Partition doesn't exist."
+
+
+    - name: Create pv /dev/xvda3
+      command: parted -s /dev/xvda mkpart primary 32.2GB 100%
+      when: xvda3.rc != 0
+
+    - name: Create pv /dev/xvdb
+      command: parted  -s /dev/xvdb mkpart primary 0G 100%
+
+
+    - name: Add LVM flag to /dev/xvdac
+      command: parted -s /dev/xvda set 3 lvm on
+      when: xvda3.rc != 0
+
+    - name: Add LVM flag to /dev/xvdb
+      command: parted -s /dev/xvdb set 1 lvm on
+      
+
+    - name: Create PV / VG on /dev/xvda2
+      lvg: vg=app pvs=/dev/xvda3,/dev/xvdb1
+
+
+    - name: Create data LV on app
+      lvol: vg=app lv=app size=100%FREE
+
+    - name: Create filesystem on data LV
+      filesystem: dev=/dev/app/app fstype=ext4
+
+    - name: Ensure data mountpoint exists
+      file: path=/app state=directory owner=root group=root mode=0755
+
+    - name: Mount data LV
+      mount: name=/app src=/dev/app/app fstype=ext4
+             state=mounted opts="errors=remount-ro,noatime,barrier=0"
+             dump=0 passno=2
